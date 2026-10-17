@@ -15,30 +15,35 @@ export default function PracticeRoom({ frame, navigation }: {
   const host = useRef<HTMLDivElement>(null)
   const board = useRef<ReturnType<typeof createPosterBoard> | null>(null)
   const [error, setError] = useState('')
-  const [entered, setEntered] = useState(false)
+  const [stage, setStage] = useState<'welcome' | 'choose'>('welcome')
+  const [mode, setMode] = useState<'test' | 'vr' | null>(null)
+  const entered = mode !== null
   const [immersive, setImmersive] = useState(false)
   const setTestMode = useRef<(enabled: boolean) => void>(() => {})
   const panel = useRef<HTMLElement>(null)
-  const entryButton = useRef<HTMLButtonElement>(null)
+  const modeButton = useRef<HTMLButtonElement>(null)
   const exitButton = useRef<HTMLButtonElement>(null)
   const moveView = useRef<(view: 'overview' | 'audience' | 'slides') => void>(() => {})
   const leaveRoom = () => {
     if (document.fullscreenElement === panel.current) void document.exitFullscreen().catch(() => {})
-    setEntered(false)
+    setMode(null)
     setTestMode.current(false)
   }
-  const enterRoom = () => {
-    setEntered(true)
-    setTestMode.current(true)
+  const enterRoom = (nextMode: 'test' | 'vr') => {
+    setMode(nextMode)
+    setTestMode.current(nextMode === 'test')
     void panel.current?.requestFullscreen?.().catch(() => {})
   }
   useEffect(() => {
+    if (stage === 'choose' && !entered) modeButton.current?.focus()
+  }, [stage, entered])
+
+  useEffect(() => {
     if (!entered) return
-    const roomPanel = panel.current
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     exitButton.current?.focus()
-    const leave = () => { setEntered(false); setTestMode.current(false) }
+    const leave = () => { setMode(null); setTestMode.current(false) }
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') leave() }
     const onFullscreen = () => { if (!document.fullscreenElement) leave() }
     document.addEventListener('keydown', onKey)
@@ -47,7 +52,6 @@ export default function PracticeRoom({ frame, navigation }: {
       document.body.style.overflow = overflow
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('fullscreenchange', onFullscreen)
-      roomPanel?.querySelector<HTMLButtonElement>('.primary')?.focus()
     }
   }, [entered])
 
@@ -67,19 +71,29 @@ export default function PracticeRoom({ frame, navigation }: {
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xdce5dd)
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100)
-    camera.position.set(0, 1.65, 0)
+    const presenterPosition = new THREE.Vector3(-2.2, 0, 1.6)
+    const audienceTarget = new THREE.Vector3(0, 1.65, -4)
+    const slidesTarget = new THREE.Vector3(0, 2, 3)
+    // An open stance between audience and board makes either a sideways glance.
+    const audienceDirection = audienceTarget.clone().sub(presenterPosition).setY(0).normalize()
+    const slidesDirection = slidesTarget.clone().sub(presenterPosition).setY(0).normalize()
+    const stanceDirection = audienceDirection.add(slidesDirection).normalize()
+    const stanceYaw = Math.atan2(-stanceDirection.x, -stanceDirection.z)
+    camera.position.copy(presenterPosition).setY(1.65)
+    camera.rotation.set(0, stanceYaw, 0, 'YXZ')
     // The floor-level pivot anchors the presenter; tracked head motion stays natural.
     const presenterPivot = new THREE.Group()
     presenterPivot.name = 'Presenter pivot'
+    presenterPivot.position.copy(presenterPosition)
     scene.add(presenterPivot)
     const xrCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 100)
     presenterPivot.add(xrCamera)
     renderer.xr.setReferenceSpaceType('local-floor')
     let needsAnchor = true
     let testMode = false
-    const look = new THREE.Euler(0, 0, 0, 'YXZ')
+    const look = new THREE.Euler(0, stanceYaw, 0, 'YXZ')
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 1.65, -4)
+    controls.target.copy(camera.position).add(stanceDirection)
     controls.enabled = false
     controls.maxDistance = 15
     controls.minDistance = 1
@@ -87,10 +101,11 @@ export default function PracticeRoom({ frame, navigation }: {
     controls.update()
     let transition: { from: THREE.Vector3; targetFrom: THREE.Vector3; to: THREE.Vector3; target: THREE.Vector3; start: number } | null = null
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const resetPresenterView = (slides = false) => {
-      camera.position.set(0, 1.65, 0)
-      look.set(0, slides ? Math.PI : 0, 0, 'YXZ')
-      camera.quaternion.setFromEuler(look)
+    const resetPresenterView = (view?: 'audience' | 'slides') => {
+      camera.position.copy(presenterPosition).setY(1.65)
+      if (view) camera.lookAt(view === 'slides' ? slidesTarget : audienceTarget)
+      else camera.rotation.set(0, stanceYaw, 0, 'YXZ')
+      look.setFromQuaternion(camera.quaternion, 'YXZ')
     }
     setTestMode.current = (enabled) => {
       testMode = enabled
@@ -125,7 +140,7 @@ export default function PracticeRoom({ frame, navigation }: {
     moveView.current = (view) => {
       if (renderer.xr.isPresenting) return
       if (!testMode) {
-        resetPresenterView(view === 'slides')
+        resetPresenterView(view === 'overview' ? undefined : view)
         return
       }
       const to = view === 'overview' ? new THREE.Vector3(4.2, 2.8, -6.7) : new THREE.Vector3(0, 1.65, 0)
@@ -161,7 +176,7 @@ export default function PracticeRoom({ frame, navigation }: {
     const restoreSize = () => {
       setImmersive(false)
       controls.enabled = testMode
-      presenterPivot.position.set(0, 0, 0)
+      presenterPivot.position.copy(presenterPosition)
       presenterPivot.quaternion.identity()
       renderer.setSize(container.clientWidth, container.clientHeight)
     }
@@ -176,10 +191,10 @@ export default function PracticeRoom({ frame, navigation }: {
           const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
             new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w),
           )
-          // Align the initial horizontal heading to the audience, preserving head pitch/roll.
-          presenterPivot.rotation.y = Math.atan2(forward.x, -forward.z)
+          // Align the initial heading to the open presenter stance, preserving pitch/roll.
+          presenterPivot.rotation.y = Math.atan2(forward.x, -forward.z) + stanceYaw
           presenterPivot.position.set(position.x, 0, position.z)
-            .applyQuaternion(presenterPivot.quaternion).negate()
+            .applyQuaternion(presenterPivot.quaternion).negate().add(presenterPosition)
           presenterPivot.updateMatrixWorld(true)
           needsAnchor = false
         }
@@ -221,25 +236,33 @@ export default function PracticeRoom({ frame, navigation }: {
 
   useEffect(() => { board.current?.setFrame(frame) }, [frame])
 
-  return <section ref={panel} className={`panel room-panel${entered ? ' room-entered' : ''}`} aria-labelledby="room-title">
-    <div className="panel-heading">
-      <div><h2 id="room-title">Your practice room</h2><p>{immersive ? 'VR mode · Turn your head to look around.' : entered ? 'Test mode · Drag to orbit, two-finger drag to pan, pinch to zoom.' : 'VR mode · Drag to look around from your presenter position.'}</p></div>
-      {entered
-        ? <button className="primary" ref={exitButton} disabled={immersive} onClick={leaveRoom}>Return to VR mode</button>
-        : <button className="primary" ref={entryButton} disabled={!!error || immersive} onClick={enterRoom}>Enter test mode ↗</button>}
-    </div>
+  return <section ref={panel} className={`panel room-panel${entered ? ' room-entered' : ''}`} aria-label="Practice room" data-mode={mode ?? 'lobby'}>
+    {!entered && <div className="room-entry" key={stage}>
+      {stage === 'welcome'
+        ? <button className="primary room-entry-button" onClick={() => setStage('choose')}>Enter Practice Room <span aria-hidden="true">↗</span></button>
+        : <div className="room-mode-options" aria-label="Choose a practice mode">
+          <button className="primary room-mode-button" ref={modeButton} disabled={!!error} onClick={() => enterRoom('test')}>Enter Test Mode</button>
+          <button className="primary room-mode-button" disabled={!!error} onClick={() => enterRoom('vr')}>Enter VR Mode</button>
+        </div>}
+    </div>}
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="room-viewport" ref={host} />
-    <div className="room-views" aria-label="Room viewpoints">
-      <button disabled={immersive} onClick={() => moveView.current('audience')}>Face audience</button>
-      <button disabled={immersive} onClick={() => moveView.current('slides')}>View slides</button>
-      {entered && <button disabled={immersive} onClick={() => moveView.current('overview')}>Room overview</button>}
+    <div className="room-content" hidden={!entered}>
+      <div className="panel-heading">
+        <div><h2>Your practice room</h2><p>{immersive ? 'VR mode · Turn your head to look around.' : mode === 'test' ? 'Test mode · Drag to orbit, Shift-drag to pan, scroll to zoom.' : 'VR mode · Drag to look around from your presenter position.'}</p></div>
+        <button className="primary" ref={exitButton} disabled={immersive} onClick={leaveRoom}>Change Mode</button>
+      </div>
+      <div className="room-viewport" ref={host} />
+      <div className="room-views" aria-label="Room viewpoints">
+        <button disabled={immersive} onClick={() => moveView.current('audience')}>Face audience</button>
+        <button disabled={immersive} onClick={() => moveView.current('slides')}>View slides</button>
+        {mode === 'test' && <button disabled={immersive} onClick={() => moveView.current('overview')}>Room overview</button>}
+      </div>
+      <PageControls navigation={navigation} label="3D viewer PDF pages" />
+      {navigation.error && navigation.pageCount > 0 && <p className="error" role="alert">{navigation.error}</p>}
+      <p className="room-status" role="status">{frame
+        ? `Board: page ${frame.page} of ${frame.pageCount}`
+        : 'Choose a PDF to display it on the board.'}</p>
+      {mode === 'vr' && <p className="room-help">You are beside the slides in an open presenter stance. Look left toward the audience or right toward your PDF. To use a headset, select Enter VR in a compatible headset browser over HTTPS.</p>}
     </div>
-    <PageControls navigation={navigation} label="3D viewer PDF pages" />
-    {navigation.error && navigation.pageCount > 0 && <p className="error" role="alert">{navigation.error}</p>}
-    <p className="room-status" role="status">{frame
-      ? `Board: page ${frame.page} of ${frame.pageCount}`
-      : 'Choose a PDF to display it on the board.'}</p>
-    <p className="room-help">VR mode places you at the presenter pivot facing the audience, with the board behind you. Test mode lets you freely inspect the room. Turn around to see your PDF. Exit VR to change pages. Open this site over HTTPS in a compatible headset browser to enter VR.</p>
   </section>
 }
