@@ -13,8 +13,9 @@ function App() {
         <div className="eyebrow">MAKE ROOM FOR YOUR NEXT BIG IDEA</div>
         <h1>Great presentations<br />start with practice<span>.</span></h1>
         <p className="intro">Bring your PDF. Take the first step toward your next presentation.</p>
-        <PdfUpload onPosterReady={setPoster} onPosterClear={() => setPoster(null)} />
-        <PracticeRoom frame={poster} />
+        <PdfUpload onPosterReady={setPoster} onPosterClear={() => setPoster(null)}>
+          {(navigation) => <PracticeRoom frame={poster} navigation={navigation} />}
+        </PdfUpload>
         <div className="below"><span className="mini-icon" aria-hidden="true">↳</span><p>Your ideas. Your own pace.<br /><span>One presentation at a time.</span></p></div>
       </main>
       <footer><span>A little preparation. A lot more confidence.</span><span>MOLTEN <span className="spark" aria-hidden="true">✳</span></span></footer>

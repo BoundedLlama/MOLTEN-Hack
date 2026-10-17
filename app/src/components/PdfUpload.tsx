@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import type { OnPosterReady } from '../poster/types'
+import type { OnPosterReady, PageNavigation } from '../poster/types'
+import PageControls from './PageControls'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 const MAX_BYTES = 20 * 1024 * 1024
@@ -10,9 +12,10 @@ const MAX_CANVAS_EDGE = 2048
 
 type Selection = { name: string; size: number; pages?: number }
 
-export default function PdfUpload({ onPosterReady, onPosterClear }: {
+export default function PdfUpload({ onPosterReady, onPosterClear, children }: {
   onPosterReady?: OnPosterReady
   onPosterClear?: () => void
+  children?: (navigation: PageNavigation) => ReactNode
 }) {
   const input = useRef<HTMLInputElement>(null)
   const generation = useRef(0)
@@ -158,7 +161,15 @@ export default function PdfUpload({ onPosterReady, onPosterClear }: {
     }
   }
 
-  return (
+  const navigation: PageNavigation = {
+    page: pageNumber,
+    pageCount: selection?.pages ?? 0,
+    loading,
+    error,
+    navigate,
+  }
+
+  return (<>
     <section className="panel" aria-labelledby="upload-title">
       <div className="panel-heading">
         <div><h2 id="upload-title">Upload your presentation</h2><p>Choose the PDF you’d like to practice with.</p></div>
@@ -195,17 +206,16 @@ export default function PdfUpload({ onPosterReady, onPosterClear }: {
       <div className={`upload-status${loading ? ' loading' : ''}`} role="status" aria-live="polite">
         {loading ? selection?.pages ? `Rendering page ${pageNumber}…` : 'Opening your PDF…' : ready ? `✓ Page ${displayedPage} is shown below.` : ''}
       </div>
-      {selection?.pages !== undefined && <nav className="page-controls" aria-label="PDF pages">
-        <button type="button" onClick={() => navigate(-1)} disabled={pageNumber <= 1}>Previous</button>
-        <span aria-live="polite" aria-atomic="true">Page {pageNumber} of {selection.pages}</span>
-        <button type="button" onClick={() => navigate(1)} disabled={pageNumber >= selection.pages}>Next</button>
-        {error && <button type="button" onClick={() => navigate(0)}>Retry page</button>}
-      </nav>}
+      <PageControls navigation={navigation} label="PDF pages" />
       <div className="pdf-preview" hidden={!ready} aria-busy={loading}>
         <div className="preview-heading"><h3>PDF preview</h3><span>Showing page {displayedPage} of {selection?.pages}</span></div>
         <div className="preview-canvas" ref={preview} />
       </div>
       <div className="privacy"><span aria-hidden="true">♧</span><span>Your file stays in this browser. Nothing is uploaded to a server.</span></div>
     </section>
+    {/* navigate reads refs only when a page button is clicked, never during rendering. */}
+    {/* oxlint-disable-next-line react/refs */}
+    {children?.(navigation)}
+    </>
   )
 }
