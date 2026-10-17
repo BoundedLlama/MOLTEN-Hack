@@ -239,10 +239,58 @@ export default function PracticeRoom({ frame, navigation }: {
   return <section ref={panel} className={`panel room-panel${entered ? ' room-entered' : ''}`} aria-label="Practice room" data-mode={mode ?? 'lobby'}>
     {!entered && <div className="room-entry" key={stage}>
       {stage === 'welcome'
-        ? <button className="primary room-entry-button" onClick={() => setStage('choose')}>Enter Practice Room <span aria-hidden="true">↗</span></button>
+        ? <button className="primary room-entry-button" onClick={() => setStage('choose')}>
+          <svg className="room-entry-art" viewBox="0 0 160 140" fill="none" aria-hidden="true">
+            <circle cx="80" cy="70" r="62" fill="#e9f0df" />
+            <path d="M22 104 80 80l58 24-58 26z" fill="#d6e3cc" />
+            <path d="M40 85V34a5 5 0 0 1 5-5h70a5 5 0 0 1 5 5v51" stroke="#6f8c72" strokeWidth="3" strokeLinecap="round" />
+            <rect x="46" y="35" width="68" height="44" rx="4" fill="white" />
+            <path d="M57 66V55m13 11V49m13 17V43" stroke="#8eaa78" strokeWidth="6" strokeLinecap="round" />
+            <path d="M96 47h8m-8 8h8m-8 8h5" stroke="#d2dfca" strokeWidth="3" strokeLinecap="round" />
+            <path d="M80 85v14m-12 4 12-4 12 4" stroke="#6f8c72" strokeWidth="3" strokeLinecap="round" />
+            <circle cx="42" cy="87" r="7" fill="#466c56" />
+            <path d="M31 109v-7a11 11 0 0 1 22 0v7" fill="#466c56" />
+            <circle cx="117" cy="87" r="7" fill="#79956a" />
+            <path d="M106 109v-7a11 11 0 0 1 22 0v7" fill="#79956a" />
+            <path d="M129 27v10m-5-5h10M26 53v6m-3-3h6" stroke="#91a77e" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span className="room-entry-copy"><span className="room-entry-eyebrow">YOUR SPACE TO PRACTICE</span><span className="room-entry-title">Enter Practice Room</span><span className="room-entry-description">Find your focus. Face your audience.</span></span>
+          <span className="room-entry-arrow" aria-hidden="true">↗</span>
+        </button>
         : <div className="room-mode-options" aria-label="Choose a practice mode">
-          <button className="primary room-mode-button" ref={modeButton} disabled={!!error} onClick={() => enterRoom('test')}>Enter Test Mode</button>
-          <button className="primary room-mode-button" disabled={!!error} onClick={() => enterRoom('vr')}>Enter VR Mode</button>
+          <button className="primary room-mode-button" ref={modeButton} disabled={!!error} onClick={() => enterRoom('test')}>
+            <svg className="room-mode-art" viewBox="0 0 160 140" fill="none" aria-hidden="true">
+              <circle cx="80" cy="70" r="60" fill="#e9f0df" />
+              <ellipse cx="80" cy="112" rx="52" ry="9" fill="#d6e3cc" />
+              <rect x="34" y="32" width="92" height="65" rx="7" fill="white" stroke="#6f8c72" strokeWidth="3" />
+              <rect x="41" y="39" width="78" height="49" rx="3" fill="#f2f6ec" />
+              <path d="m55 73 25-24 25 24M55 73h50M80 49v24" stroke="#91a77e" strokeWidth="2" strokeLinejoin="round" />
+              <path d="M26 98h108l-8 10H34z" fill="white" stroke="#6f8c72" strokeWidth="3" strokeLinejoin="round" />
+              <path d="m91 66 5 24 6-8 10-3z" fill="#466c56" stroke="white" strokeWidth="2" strokeLinejoin="round" />
+              <path d="M132 24v10m-5-5h10M25 60v6m-3-3h6" stroke="#91a77e" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span className="room-mode-eyebrow">EXPLORE THE SPACE</span>
+            <span className="room-mode-title">Enter Test Mode</span>
+            <span className="room-mode-description">Pan, orbit, and find your angle.</span>
+            <span className="room-mode-arrow" aria-hidden="true">↗</span>
+          </button>
+          <button className="primary room-mode-button" disabled={!!error} onClick={() => enterRoom('vr')}>
+            <svg className="room-mode-art" viewBox="0 0 160 140" fill="none" aria-hidden="true">
+              <circle cx="80" cy="70" r="60" fill="#e9f0df" />
+              <ellipse cx="80" cy="112" rx="49" ry="9" fill="#d6e3cc" />
+              <path d="M43 66V52c0-28 74-28 74 0v14" stroke="#79956a" strokeWidth="8" />
+              <path d="M38 56h84a8 8 0 0 1 8 8v23a13 13 0 0 1-13 13H96l-9-10H73l-9 10H43a13 13 0 0 1-13-13V64a8 8 0 0 1 8-8Z" fill="white" stroke="#6f8c72" strokeWidth="3" strokeLinejoin="round" />
+              <rect x="41" y="65" width="78" height="18" rx="9" fill="#d6e3cc" />
+              <circle cx="55" cy="74" r="4" fill="#79956a" />
+              <circle cx="105" cy="74" r="4" fill="#79956a" />
+              <path d="M70 72h20" stroke="white" strokeWidth="3" strokeLinecap="round" />
+              <path d="M130 29v10m-5-5h10M26 45v6m-3-3h6" stroke="#91a77e" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span className="room-mode-eyebrow">TAKE YOUR PLACE</span>
+            <span className="room-mode-title">Enter VR Mode</span>
+            <span className="room-mode-description">Step up and face your audience.</span>
+            <span className="room-mode-arrow" aria-hidden="true">↗</span>
+          </button>
         </div>}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
