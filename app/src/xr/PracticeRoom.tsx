@@ -5,6 +5,7 @@ import { Countdown } from '../session/Countdown'
 import type { PageNavigation, PosterFrame } from '../poster/types'
 import { SessionClock, type SessionAction } from '../session/SessionClock'
 import SessionControls from '../session/SessionControls'
+import { shouldSuspendPage } from './visibility'
 import { createSessionPanel } from './sessionPanel'
 import PageControls from '../components/PageControls'
 import { createPosterBoard } from './posterBoard'
@@ -22,6 +23,7 @@ export default function PracticeRoom({ frame, navigation }: {
   const [launching, setLaunching] = useState(false)
   const launchGeneration = useRef(0)
   const xrActive = useRef(false)
+  const xrEntering = useRef(false)
   const enterXR = useRef<() => Promise<void>>(async () => {})
   const exitXR = useRef<() => void>(() => {})
   const hudActions = useRef({ toggle: () => {}, stop: () => {} })
@@ -63,7 +65,7 @@ export default function PracticeRoom({ frame, navigation }: {
   useEffect(() => { readiness.current = reason; clock.setReady(!reason) }, [clock, reason])
   useEffect(() => {
     alive.current = true
-    const suspend = () => { if (document.hidden) { cancelRef.current(); clock.act('pause') } }
+    const suspend = () => { if (shouldSuspendPage(document.hidden, xrActive.current, xrEntering.current)) { cancelRef.current(); clock.act('pause') } }
     document.addEventListener('visibilitychange', suspend)
     return () => {
       alive.current = false
@@ -124,7 +126,7 @@ export default function PracticeRoom({ frame, navigation }: {
     setVrPhase('start')
     setMode(nextMode)
     setTestMode.current(nextMode === 'test')
-    void panel.current?.requestFullscreen?.().catch(() => {})
+    if (nextMode === 'test') void panel.current?.requestFullscreen?.().catch(() => {})
   }
   useEffect(() => {
     if (stage === 'choose' && !entered) modeButton.current?.focus()
@@ -137,7 +139,7 @@ export default function PracticeRoom({ frame, navigation }: {
     exitButton.current?.focus()
     const leave = () => { launchGeneration.current++; cancelRef.current(); clock.act('pause'); setMode(null); setTestMode.current(false) }
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') leave() }
-    const onFullscreen = () => { if (!document.fullscreenElement && !xrActive.current) leave() }
+    const onFullscreen = () => { if (!document.fullscreenElement && !xrActive.current && !xrEntering.current) leave() }
     document.addEventListener('keydown', onKey)
     document.addEventListener('fullscreenchange', onFullscreen)
     return () => {
@@ -156,19 +158,21 @@ export default function PracticeRoom({ frame, navigation }: {
   }
   const togglePractice = () => act(clock.state === 'paused' ? 'resume' : 'pause')
   const startPractice = async () => {
-    if (reason || launching) return
+    if (reason || launching || xrEntering.current) return
     const generation = ++launchGeneration.current
     setLaunching(true)
+    xrEntering.current = true
     try {
       await enterXR.current()
-      if (generation !== launchGeneration.current || document.hidden || readiness.current) { exitXR.current(); return }
+      if (generation !== launchGeneration.current || shouldSuspendPage(document.hidden, xrActive.current, false) || readiness.current) { exitXR.current(); return }
       if (clock.state === 'paused') act('end')
       if (!clock.can('start')) return
       setVrPhase('practice')
       countdown.start()
       setCount(3)
-    } catch { setSessionError('Could not enter VR. Check headset permissions and try again.') }
-    finally { setLaunching(false) }
+    } catch (error) {
+      setSessionError(`Could not enter VR: ${error instanceof Error ? error.message : String(error)}`)
+    } finally { xrEntering.current = false; setLaunching(false) }
   }
   useEffect(() => {
     cancelRef.current = () => {
@@ -182,7 +186,7 @@ export default function PracticeRoom({ frame, navigation }: {
   useEffect(() => {
     if (count === null) return
     const timer = window.setInterval(() => {
-      if (readiness.current || document.hidden) { cancelRef.current(); return }
+      if (readiness.current || shouldSuspendPage(document.hidden, xrActive.current, xrEntering.current)) { cancelRef.current(); return }
       const remaining = countdown.remaining
       if (remaining === 0) {
         countdown.cancel()
@@ -311,10 +315,17 @@ export default function PracticeRoom({ frame, navigation }: {
     const support = navigator.xr?.isSessionSupported('immersive-vr').then(value => { xrSupported = value }).catch(() => {})
     enterXR.current = async () => {
       await support
-      if (disposed || renderer.xr.isPresenting || !xrSupported) return
-      const session = await navigator.xr!.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] })
+      if (disposed) throw new Error('The room has closed. Reopen it and try again.')
+      if (renderer.xr.isPresenting) return
+      if (!xrSupported) throw new Error('Immersive VR is unavailable. Open the HTTPS site in Quest Browser and allow VR access.')
+      const session = await navigator.xr!.requestSession('immersive-vr', { requiredFeatures: ['local-floor'] })
       if (disposed) { await session.end(); return }
-      await renderer.xr.setSession(session)
+      try {
+        await renderer.xr.setSession(session)
+      } catch (error) {
+        await session.end().catch(() => {})
+        throw error
+      }
     }
     exitXR.current = () => { const session = renderer.xr.getSession(); if (session) void session.end().catch(() => {}) }
     setRoomReady(true)
@@ -338,6 +349,7 @@ export default function PracticeRoom({ frame, navigation }: {
     }
     const restoreSize = () => {
       xrActive.current = false
+      setVrPhase('start')
       cancelRef.current()
       clock.act('pause')
       sessionPanel.mesh.visible = false
@@ -375,6 +387,11 @@ export default function PracticeRoom({ frame, navigation }: {
         controls.target.lerpVectors(transition.targetFrom, transition.target, eased)
         controls.update()
         if (progress === 1) transition = null
+      }
+      if (renderer.xr.isPresenting && countdown.remaining === 0) {
+        countdown.cancel()
+        setCount(null)
+        actRef.current('start')
       }
       sessionPanel.update(countdown.remaining, clock.state === 'paused', countdown.remaining !== null || clock.state === 'running' || clock.state === 'paused')
       if (renderer.xr.isPresenting) {
