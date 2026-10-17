@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { VRButton } from 'three/addons/webxr/VRButton.js'
+import { Countdown } from '../session/Countdown'
 import type { PageNavigation, PosterFrame } from '../poster/types'
+import { SessionClock, type SessionAction } from '../session/SessionClock'
+import SessionControls from '../session/SessionControls'
+import { createSessionPanel } from './sessionPanel'
 import PageControls from '../components/PageControls'
 import { createPosterBoard } from './posterBoard'
 import { createConferenceRoom } from './conferenceRoom'
@@ -12,6 +15,89 @@ export default function PracticeRoom({ frame, navigation }: {
   frame: PosterFrame | null
   navigation: PageNavigation
 }) {
+  const [clock] = useState(() => new SessionClock())
+  const [countdown] = useState(() => new Countdown())
+  const [count, setCount] = useState<number | null>(null)
+  const [vrPhase, setVrPhase] = useState<'start' | 'practice'>('start')
+  const [launching, setLaunching] = useState(false)
+  const launchGeneration = useRef(0)
+  const xrActive = useRef(false)
+  const enterXR = useRef<() => Promise<void>>(async () => {})
+  const exitXR = useRef<() => void>(() => {})
+  const hudActions = useRef({ toggle: () => {}, stop: () => {} })
+  const cancelCountdown = () => { countdown.cancel(); setCount(null) }
+  const cancelRef = useRef(cancelCountdown)
+  const [clockState, setClockState] = useState(clock.state)
+  useEffect(() => {
+    // Also reflect externally triggered pauses (visibility, device loss, XR exit).
+    const timer = window.setInterval(() => setClockState(clock.state), 100)
+    return () => window.clearInterval(timer)
+  }, [clock])
+  const [roomReady, setRoomReady] = useState(false)
+  const [audioState, setAudioState] = useState<'off' | 'loading' | 'ready'>('off')
+  const [audioUrl, setAudioUrl] = useState('')
+  const [sessionError, setSessionError] = useState('')
+  const [audioFinalizing, setAudioFinalizing] = useState(false)
+  const [, refreshSession] = useState(0)
+  const audioResources = useRef<{ stream: MediaStream; recorder: MediaRecorder } | null>(null)
+  const alive = useRef(true)
+  const readiness = useRef('Upload a PDF before starting.')
+  const currentFrame = useRef(frame)
+  const act = (action: SessionAction) => {
+    try {
+      if (clock.act(action) && (action === 'start' || action === 'resume')) {
+        clock.record('page', { page: currentFrame.current?.page })
+      }
+      setSessionError('')
+      refreshSession(value => value + 1)
+    } catch { setSessionError('Session control failed. Check your microphone and try again.') }
+  }
+  const actRef = useRef(act)
+  useEffect(() => { actRef.current = act })
+  useEffect(() => {
+    currentFrame.current = frame
+    if (frame) clock.record('page', { page: frame.page })
+    else clock.act('pause')
+  }, [clock, frame])
+  const reason = audioFinalizing ? 'Saving audio…' : !roomReady ? 'Preparing room…' : !frame ? 'Upload a PDF before starting.' : navigation.loading ? 'Rendering PDF…' : navigation.error ? 'Resolve the PDF error before starting.' : audioState === 'loading' ? 'Waiting for microphone permission…' : ''
+  useEffect(() => { readiness.current = reason; clock.setReady(!reason) }, [clock, reason])
+  useEffect(() => {
+    alive.current = true
+    const suspend = () => { if (document.hidden) { cancelRef.current(); clock.act('pause') } }
+    document.addEventListener('visibilitychange', suspend)
+    return () => {
+      alive.current = false
+      clock.act('end')
+      audioResources.current?.stream.getTracks().forEach(track => track.stop())
+      document.removeEventListener('visibilitychange', suspend)
+    }
+  }, [clock])
+  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl) }, [audioUrl])
+  const enableAudio = async () => {
+    if (clock.state === 'running' || clock.state === 'paused') return
+    clock.setReady(false)
+    setAudioState('loading')
+    let acquiredStream: MediaStream | undefined
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      acquiredStream = stream
+      if (!alive.current) { stream.getTracks().forEach(track => track.stop()); return }
+      const recorder = new MediaRecorder(stream)
+      let chunks: Blob[] = []
+      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }
+      recorder.onstop = () => { if (alive.current) { setAudioUrl(URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType }))); setAudioFinalizing(false) } }
+      recorder.onerror = () => { clock.act('end'); setSessionError('Audio recording failed. Enable the microphone again.'); clock.setAudio(); setAudioState('off'); stream.getTracks().forEach(track => track.stop()) }
+      stream.getTracks().forEach(track => track.addEventListener('ended', () => { clock.act('end'); clock.setAudio(); setAudioState('off') }))
+      audioResources.current = { stream, recorder }
+      clock.setAudio({
+        start() { chunks = []; setAudioUrl(''); recorder.start() },
+        pause() { if (recorder.state === 'recording') recorder.pause() },
+        resume() { if (recorder.state === 'paused') recorder.resume() },
+        stop() { if (recorder.state !== 'inactive') { clock.setReady(false); setAudioFinalizing(true); recorder.stop() } },
+      })
+      setAudioState('ready')
+    } catch { acquiredStream?.getTracks().forEach(track => track.stop()); setAudioState('off'); setSessionError('Microphone unavailable. You can practice without audio.'); }
+  }
   const host = useRef<HTMLDivElement>(null)
   const board = useRef<ReturnType<typeof createPosterBoard> | null>(null)
   const [error, setError] = useState('')
@@ -25,11 +111,17 @@ export default function PracticeRoom({ frame, navigation }: {
   const exitButton = useRef<HTMLButtonElement>(null)
   const moveView = useRef<(view: 'overview' | 'audience' | 'slides') => void>(() => {})
   const leaveRoom = () => {
+    launchGeneration.current++
+    cancelCountdown()
+    setVrPhase('start')
     if (document.fullscreenElement === panel.current) void document.exitFullscreen().catch(() => {})
+    clock.act('pause')
     setMode(null)
     setTestMode.current(false)
   }
   const enterRoom = (nextMode: 'test' | 'vr') => {
+    cancelCountdown()
+    setVrPhase('start')
     setMode(nextMode)
     setTestMode.current(nextMode === 'test')
     void panel.current?.requestFullscreen?.().catch(() => {})
@@ -43,9 +135,9 @@ export default function PracticeRoom({ frame, navigation }: {
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     exitButton.current?.focus()
-    const leave = () => { setMode(null); setTestMode.current(false) }
+    const leave = () => { launchGeneration.current++; cancelRef.current(); clock.act('pause'); setMode(null); setTestMode.current(false) }
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') leave() }
-    const onFullscreen = () => { if (!document.fullscreenElement) leave() }
+    const onFullscreen = () => { if (!document.fullscreenElement && !xrActive.current) leave() }
     document.addEventListener('keydown', onKey)
     document.addEventListener('fullscreenchange', onFullscreen)
     return () => {
@@ -53,7 +145,54 @@ export default function PracticeRoom({ frame, navigation }: {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('fullscreenchange', onFullscreen)
     }
-  }, [entered])
+  }, [entered, clock])
+
+  const stopPractice = () => {
+    launchGeneration.current++
+    cancelCountdown()
+    act('end')
+    setVrPhase('start')
+    exitXR.current()
+  }
+  const togglePractice = () => act(clock.state === 'paused' ? 'resume' : 'pause')
+  const startPractice = async () => {
+    if (reason || launching) return
+    const generation = ++launchGeneration.current
+    setLaunching(true)
+    try {
+      await enterXR.current()
+      if (generation !== launchGeneration.current || document.hidden || readiness.current) { exitXR.current(); return }
+      if (clock.state === 'paused') act('end')
+      if (!clock.can('start')) return
+      setVrPhase('practice')
+      countdown.start()
+      setCount(3)
+    } catch { setSessionError('Could not enter VR. Check headset permissions and try again.') }
+    finally { setLaunching(false) }
+  }
+  useEffect(() => {
+    cancelRef.current = () => {
+      const wasCounting = countdown.remaining !== null
+      countdown.cancel()
+      setCount(null)
+      if (wasCounting) { setVrPhase('start'); exitXR.current() }
+    }
+    hudActions.current = { toggle: togglePractice, stop: stopPractice }
+  })
+  useEffect(() => {
+    if (count === null) return
+    const timer = window.setInterval(() => {
+      if (readiness.current || document.hidden) { cancelRef.current(); return }
+      const remaining = countdown.remaining
+      if (remaining === 0) {
+        countdown.cancel()
+        setCount(null)
+        actRef.current('start')
+        if (clock.state !== 'running') setVrPhase('start')
+      } else setCount(remaining)
+    }, 50)
+    return () => window.clearInterval(timer)
+  }, [count, countdown, clock])
 
   useEffect(() => {
     const container = host.current!
@@ -86,6 +225,18 @@ export default function PracticeRoom({ frame, navigation }: {
     presenterPivot.name = 'Presenter pivot'
     presenterPivot.position.copy(presenterPosition)
     scene.add(presenterPivot)
+    const sessionPanel = createSessionPanel(() => hudActions.current.toggle(), () => hudActions.current.stop())
+    scene.add(sessionPanel.mesh)
+    sessionPanel.mesh.visible = false
+    const controllerCleanups = [0, 1].map(index => {
+      const controller = renderer.xr.getController(index)
+      presenterPivot.add(controller)
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -3)]), new THREE.LineBasicMaterial({ color: 0xd7ecba }))
+      controller.add(line)
+      const select = () => sessionPanel.select(controller)
+      controller.addEventListener('select', select)
+      return () => { controller.removeEventListener('select', select); line.geometry.dispose(); line.material.dispose() }
+    })
     const xrCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 100)
     presenterPivot.add(xrCamera)
     renderer.xr.setReferenceSpaceType('local-floor')
@@ -155,8 +306,18 @@ export default function PracticeRoom({ frame, navigation }: {
     scene.add(room.group, createAudience(12))
     renderer.domElement.setAttribute('aria-label', '3D presentation room. In VR mode, drag to look from the presenter position. Enter test mode to orbit, pan and zoom.')
     container.appendChild(renderer.domElement)
-    const vrButton = VRButton.createButton(renderer)
-    container.appendChild(vrButton)
+    let xrSupported = false
+    let disposed = false
+    const support = navigator.xr?.isSessionSupported('immersive-vr').then(value => { xrSupported = value }).catch(() => {})
+    enterXR.current = async () => {
+      await support
+      if (disposed || renderer.xr.isPresenting || !xrSupported) return
+      const session = await navigator.xr!.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] })
+      if (disposed) { await session.end(); return }
+      await renderer.xr.setSession(session)
+    }
+    exitXR.current = () => { const session = renderer.xr.getSession(); if (session) void session.end().catch(() => {}) }
+    setRoomReady(true)
     const resize = new ResizeObserver(() => {
       const width = container.clientWidth
       const height = container.clientHeight
@@ -167,13 +328,19 @@ export default function PracticeRoom({ frame, navigation }: {
     })
     resize.observe(container)
     const onSessionStart = () => {
+      xrActive.current = true
       needsAnchor = true
       transition = null
       pointer = null
       controls.enabled = false
       setImmersive(true)
+      sessionPanel.mesh.visible = true
     }
     const restoreSize = () => {
+      xrActive.current = false
+      cancelRef.current()
+      clock.act('pause')
+      sessionPanel.mesh.visible = false
       setImmersive(false)
       controls.enabled = testMode
       presenterPivot.position.copy(presenterPosition)
@@ -182,6 +349,8 @@ export default function PracticeRoom({ frame, navigation }: {
     }
     renderer.xr.addEventListener('sessionstart', onSessionStart)
     renderer.xr.addEventListener('sessionend', restoreSize)
+    let lastHeadSample = -Infinity
+    const headOrientation = new THREE.Quaternion()
     renderer.setAnimationLoop((_time, frame) => {
       if (renderer.xr.isPresenting && needsAnchor && frame) {
         const referenceSpace = renderer.xr.getReferenceSpace()
@@ -207,10 +376,26 @@ export default function PracticeRoom({ frame, navigation }: {
         controls.update()
         if (progress === 1) transition = null
       }
+      sessionPanel.update(countdown.remaining, clock.state === 'paused', countdown.remaining !== null || clock.state === 'running' || clock.state === 'paused')
+      if (renderer.xr.isPresenting) {
+        const viewer = renderer.xr.getCamera()
+        viewer.getWorldPosition(sessionPanel.mesh.position)
+        viewer.getWorldQuaternion(sessionPanel.mesh.quaternion)
+      }
+      if (clock.state === 'running' && (clock.elapsedMs < lastHeadSample || clock.elapsedMs - lastHeadSample >= 100)) {
+        const head = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera
+        head.getWorldQuaternion(headOrientation)
+        clock.record('head', { orientation: headOrientation.toArray(), source: renderer.xr.isPresenting ? 'headset' : 'desktop-preview' })
+        lastHeadSample = clock.elapsedMs
+      }
       if (!reducedMotion) updateAudience(performance.now() / 1000)
       renderer.render(scene, renderer.xr.isPresenting ? xrCamera : camera)
     })
     return () => {
+      disposed = true
+      countdown.cancel()
+      enterXR.current = async () => {}
+      exitXR.current = () => {}
       resize.disconnect()
       renderer.xr.removeEventListener('sessionstart', onSessionStart)
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
@@ -223,6 +408,8 @@ export default function PracticeRoom({ frame, navigation }: {
       renderer.setAnimationLoop(null)
       const session = renderer.xr.getSession()
       if (session) void session.end().catch(() => {})
+      controllerCleanups.forEach(cleanup => cleanup())
+      sessionPanel.dispose()
       controls.dispose()
       poster.dispose()
       board.current = null
@@ -232,7 +419,7 @@ export default function PracticeRoom({ frame, navigation }: {
       renderer.dispose()
       container.replaceChildren()
     }
-  }, [])
+  }, [clock, countdown])
 
   useEffect(() => { board.current?.setFrame(frame) }, [frame])
 
@@ -295,22 +482,55 @@ export default function PracticeRoom({ frame, navigation }: {
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
     <div className="room-content" hidden={!entered}>
-      <div className="panel-heading">
+      {mode !== 'vr' && <div className="panel-heading">
         <div><h2>Your practice room</h2><p>{immersive ? 'VR mode · Turn your head to look around.' : mode === 'test' ? 'Test mode · Drag to orbit, Shift-drag to pan, scroll to zoom.' : 'VR mode · Drag to look around from your presenter position.'}</p></div>
         <button className="primary" ref={exitButton} disabled={immersive} onClick={leaveRoom}>Change Mode</button>
-      </div>
+      </div>}
       <div className="room-viewport" ref={host} />
+      {mode !== 'vr' && <>
       <div className="room-views" aria-label="Room viewpoints">
         <button disabled={immersive} onClick={() => moveView.current('audience')}>Face audience</button>
         <button disabled={immersive} onClick={() => moveView.current('slides')}>View slides</button>
         {mode === 'test' && <button disabled={immersive} onClick={() => moveView.current('overview')}>Room overview</button>}
+      </div>
+      <SessionControls clock={clock} act={act} reason={reason} />
+      <div className="session-audio">
+        <button disabled={audioState !== 'off' || clock.state === 'running' || clock.state === 'paused'} onClick={() => void enableAudio()}>{audioState === 'ready' ? 'Microphone ready' : audioState === 'loading' ? 'Connecting microphone…' : 'Enable optional audio recording'}</button>
+        {audioUrl && <a href={audioUrl} download="practice-audio.webm">Download session audio</a>}
+        {sessionError && <p role="alert">{sessionError}</p>}
       </div>
       <PageControls navigation={navigation} label="3D viewer PDF pages" />
       {navigation.error && navigation.pageCount > 0 && <p className="error" role="alert">{navigation.error}</p>}
       <p className="room-status" role="status">{frame
         ? `Board: page ${frame.page} of ${frame.pageCount}`
         : 'Choose a PDF to display it on the board.'}</p>
-      {mode === 'vr' && <p className="room-help">You are beside the slides in an open presenter stance. Look left toward the audience or right toward your PDF. To use a headset, select Enter VR in a compatible headset browser over HTTPS.</p>}
+      </>}
+      {mode === 'vr' && !immersive && vrPhase === 'start' && <div className="vr-start-screen">
+        <button className="vr-back" onClick={leaveRoom} aria-label="Back to mode selection">←</button>
+        <div className="vr-start-card">
+          <span className="vr-eyebrow">YOUR MOMENT TO PRACTICE</span>
+          <h2>Take a breath.<br />Take the room.</h2>
+          <p>Your audience is ready. Begin when you are.</p>
+          <button className="vr-start-button" disabled={!!reason || launching} onClick={() => void startPractice()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 11 7-11 7Z" fill="currentColor" /></svg>
+            {launching ? 'Entering…' : 'Start'}
+          </button>
+          <p className="vr-ready-note" role="status">{sessionError || reason || 'A little space. A little confidence.'}</p>
+          {audioUrl && <a href={audioUrl} download="practice-audio.webm">Download session audio</a>}
+        </div>
+      </div>}
+      {mode === 'vr' && vrPhase === 'practice' && !immersive && <>
+        <div className="vr-icon-controls" aria-label="Practice controls">
+          <button disabled={count !== null || (clockState === 'paused' && !!reason)} onClick={togglePractice} aria-label={clockState === 'paused' ? 'Resume practice' : 'Pause practice'} title={clockState === 'paused' ? 'Resume' : 'Pause'}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">{clockState === 'paused' ? <path d="m8 5 11 7-11 7Z" fill="currentColor" /> : <><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></>}</svg>
+          </button>
+          <button onClick={stopPractice} aria-label="Stop practice" title="Stop"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg></button>
+        </div>
+        {count !== null && <div className="vr-countdown" role="status" aria-label={`Starting in ${count}`}><span key={count}>{count}</span></div>}
+        {count === null && clockState === 'paused' && <div className="vr-paused" role="status">Paused</div>}
+        {sessionError && <p className="vr-overlay-error" role="alert">{sessionError}</p>}
+      </>}
+
     </div>
   </section>
 }

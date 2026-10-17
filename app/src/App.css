@@ -24,3 +24,35 @@
 @media(max-width:600px){.room-mode-button.primary{display:grid;grid-template-columns:85px 1fr 28px;gap:6px 12px;min-height:135px;padding:16px;text-align:left;align-items:center}.room-mode-art{grid-column:1;grid-row:1/4;width:85px;height:85px}.room-mode-button .room-mode-eyebrow,.room-mode-button .room-mode-title,.room-mode-button .room-mode-description{grid-column:2}.room-mode-button .room-mode-eyebrow{font-size:8px;letter-spacing:1px}.room-mode-button .room-mode-title{font-size:17px}.room-mode-button .room-mode-arrow{grid-column:3;grid-row:1/4;width:28px;height:28px;margin:0}}
 @media(max-width:380px){.room-mode-button.primary{grid-template-columns:65px 1fr;gap:6px 10px}.room-mode-art{width:65px;height:75px}.room-mode-button .room-mode-arrow{display:none}}
 @media(prefers-reduced-motion:reduce){.room-mode-button.primary:hover:not(:disabled),.room-mode-button:hover:not(:disabled) .room-mode-art,.room-mode-button:hover:not(:disabled) .room-mode-arrow{transform:none}}
+
+.session-controls { padding: 16px; border: 1px solid #ccd8c7; border-radius: 12px; background: #f2f6ec; }
+.session-controls strong { display: block; text-transform: capitalize; font-variant-numeric: tabular-nums; }
+.session-controls > div, .session-audio { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
+.session-controls p { margin-bottom: 0; }
+.session-controls button { text-transform: capitalize; }
+
+/* VR practice owns the entire viewport; controls float above the room. */
+.room-panel.room-entered[data-mode="vr"] { padding: 0; overflow: hidden; background: #dce5dd; }
+.room-entered[data-mode="vr"] .room-viewport { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; border-radius: 0; animation: none; }
+.vr-start-screen { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 30%, #f4f6eb 0%, #e1e9da 65%, #c9d9c4 100%); }
+.vr-start-card { text-align: center; padding: 32px; max-width: 600px; }
+.vr-eyebrow { color: #6d856c; font-size: 11px; font-weight: 600; letter-spacing: .22em; }
+.vr-start-card h2 { margin: 26px 0 18px; color: #294b3b; font-size: clamp(42px, 7vw, 78px); line-height: 1.06; font-weight: 400; letter-spacing: -.055em; }
+.vr-start-card p { color: #6a7e68; font-size: 14px; }
+.vr-start-button { display: inline-flex; align-items: center; justify-content: center; gap: 14px; margin: 30px 0 18px; padding: 19px 46px; border: 1px solid #46644c; border-radius: 100px; color: #f4f7ec; background: #365740; font-size: 18px; box-shadow: 0 12px 32px #36574025; cursor: pointer; transition: transform .2s, background .2s; }
+.vr-start-button:hover:not(:disabled) { transform: translateY(-2px); background: #284733; }
+.vr-start-button:disabled { opacity: .45; cursor: not-allowed; }
+.vr-start-button svg { width: 22px; height: 22px; }
+.vr-start-card .vr-ready-note { font-size: 12px; min-height: 18px; }
+.vr-back { position: absolute; top: 24px; left: 24px; border: 1px solid #a8b9a2; border-radius: 50%; width: 46px; height: 46px; background: transparent; color: #365740; font-size: 22px; cursor: pointer; }
+.vr-icon-controls { position: absolute; z-index: 4; left: max(24px, env(safe-area-inset-left)); top: max(24px, env(safe-area-inset-top)); display: flex; gap: 12px; }
+.vr-icon-controls button { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #ffffff70; border-radius: 50%; color: #355541; background: #f2f6ecd9; backdrop-filter: blur(16px); box-shadow: 0 4px 18px #24382c15; cursor: pointer; transition: background .2s, transform .2s; }
+.vr-icon-controls button:hover:not(:disabled) { background: #fff; transform: translateY(-2px); }
+.vr-icon-controls button:disabled { opacity: .4; cursor: default; }
+.vr-icon-controls svg { width: 22px; height: 22px; fill: currentColor; }
+.vr-countdown { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 3; background: #14271e12; }
+.vr-countdown span { font-size: clamp(140px, 25vw, 300px); font-weight: 200; line-height: 1; color: #ffffffa6; text-shadow: 0 2px 40px #24382c20; animation: countdown-arrive 1s ease-out both; }
+.vr-paused { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); padding: 10px 24px; background: #f2f6ecd9; border-radius: 30px; color: #355541; letter-spacing: .12em; font-size: 12px; pointer-events: none; }
+.vr-overlay-error { position: absolute; bottom: 24px; left: 24px; background: #f2f6ec; padding: 12px; }
+@keyframes countdown-arrive { from { opacity: 0; transform: scale(1.08); } 20% { opacity: 1; } to { opacity: .65; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .vr-countdown span { animation: none; } .vr-start-button, .vr-icon-controls button { transition: none; } }

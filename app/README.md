@@ -52,3 +52,35 @@ HTTPS URL and use Enter VR. The presenter starts at the origin facing -Z; the
 board is at +Z facing -Z. Turn around to see it. Exit VR to use page controls.
 Headset entry/exit, HTTPS deployment, and device-specific behavior require actual
 hardware verification. Audience and hand interaction are not yet included here.
+
+### Practice session controls
+
+Upload a PDF and enter either room mode. Start requires a rendered page, a
+working room, and no pending PDF render/error or microphone request. Audio is
+optional: enable it before Start to record locally. Desktop controls and VR controls share one `SessionClock`. VR mode opens a
+fullscreen Start screen. Start enters immersive VR on supported browsers (or the
+fullscreen presenter preview otherwise), then shows translucent white 3, 2, 1
+numbers before starting measurements. The full control panel is hidden in VR;
+round pause/resume and stop icons float at the top left. In a headset, the compact
+icons and countdown follow the viewer; select icons with either controller ray.
+Stop returns to the Start screen. Headset testing is still required.
+
+`SessionClock.elapsedMs` and event timestamps use active milliseconds since Start.
+Pause freezes this clock, pauses MediaRecorder, and rejects measurement events.
+Resume records the currently displayed page; changes while paused do not accrue
+page duration. End freezes the result; another Start clears the timeline. Audio
+must finish saving before another Start. Downloads remain local. Leaving the
+room, exiting XR, hiding the tab, or removing the PDF pauses a running session.
+Head orientation is sampled at 10 Hz during active practice; desktop samples are
+explicitly labeled `desktop-preview`, not headset measurements or eye gaze.
+
+Integration: producers use `clock.record(type, data)` and consumers read
+`clock.events`. Audio adapters implement start/pause/resume/stop and must be
+attached before Start. Do not use wall-clock timestamps or MediaRecorder chunk
+arrival times for practice measurements. The XR animation timestamp remains for
+visual animation only. No speech analysis or head-pose scoring is implemented.
+
+Verification: `npm run build`, `npm run lint`, and
+`node --test src/session/*.test.mjs src/xr/posterBoard.test.mjs`.
+On a headset over HTTPS, verify ray selection, pause/resume during speech,
+recording playback, hidden-tab/XR-exit pause, PDF removal, and restart.
