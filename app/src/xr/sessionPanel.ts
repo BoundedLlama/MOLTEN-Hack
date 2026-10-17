@@ -1,19 +1,19 @@
 import * as THREE from 'three'
 
-/** Compact head-relative HUD; no opaque panel obscures the presentation. */
+/** View-following 3D buttons plus non-interactive countdown/timer overlays. */
 export function createSessionPanel(onToggle: () => void, onStop: () => void) {
   const group = new THREE.Group()
   const resources: { geometry: THREE.PlaneGeometry; material: THREE.MeshBasicMaterial; texture: THREE.CanvasTexture }[] = []
-  function plane(width: number, height: number, pixels: number) {
+  function plane(width: number, height: number, pixels: number, overlay = false) {
     const canvas = document.createElement('canvas')
     canvas.width = pixels; canvas.height = pixels
     const context = canvas.getContext('2d')!
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     const geometry = new THREE.PlaneGeometry(width, height)
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false })
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: !overlay, depthWrite: !overlay })
     const mesh = new THREE.Mesh(geometry, material)
-    mesh.renderOrder = 1000
+    mesh.renderOrder = overlay ? 1000 : 0
     group.add(mesh)
     resources.push({ geometry, material, texture })
     return { mesh, context, texture }
@@ -22,10 +22,28 @@ export function createSessionPanel(onToggle: () => void, onStop: () => void) {
   const stop = plane(0.09, 0.09, 128)
   toggle.mesh.position.set(-0.43, 0.29, -1)
   stop.mesh.position.set(-0.32, 0.29, -1)
-  const number = plane(0.55, 0.55, 512)
+  const number = plane(0.55, 0.55, 512, true)
   number.mesh.position.z = -1.2
+  const timer = plane(0.26, 0.13, 256, true)
+  timer.mesh.position.set(0.36, 0.29, -1)
+  let previousTime = ''
   let previous = ''
-  function update(count: number | null, paused: boolean, active: boolean) {
+  function update(count: number | null, paused: boolean, active: boolean, elapsedMs: number) {
+    timer.mesh.visible = active
+    const seconds = Math.floor((count !== null ? 0 : elapsedMs) / 1000)
+    const time = `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
+    if (time !== previousTime) {
+      previousTime = time
+      const ctx = timer.context
+      ctx.clearRect(0, 0, 256, 256)
+      ctx.fillStyle = 'rgba(242,246,236,0.9)'
+      ctx.beginPath(); ctx.roundRect(0, 48, 256, 160, 32); ctx.fill()
+      ctx.fillStyle = '#385443'
+      ctx.font = '600 72px monospace'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(time, 128, 132)
+      timer.texture.needsUpdate = true
+    }
     const key = `${count}/${paused}/${active}`
     if (key === previous) return
     previous = key

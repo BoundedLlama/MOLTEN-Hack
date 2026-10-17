@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { Countdown } from '../session/Countdown'
 import type { PageNavigation, PosterFrame } from '../poster/types'
-import { SessionClock, type SessionAction } from '../session/SessionClock'
+import { SessionClock, formatTime, type SessionAction } from '../session/SessionClock'
 import SessionControls from '../session/SessionControls'
 import { shouldSuspendPage } from './visibility'
 import { createSessionPanel } from './sessionPanel'
@@ -29,10 +29,11 @@ export default function PracticeRoom({ frame, navigation }: {
   const hudActions = useRef({ toggle: () => {}, stop: () => {} })
   const cancelCountdown = () => { countdown.cancel(); setCount(null) }
   const cancelRef = useRef(cancelCountdown)
+  const [elapsedMs, setElapsedMs] = useState(0)
   const [clockState, setClockState] = useState(clock.state)
   useEffect(() => {
     // Also reflect externally triggered pauses (visibility, device loss, XR exit).
-    const timer = window.setInterval(() => setClockState(clock.state), 100)
+    const timer = window.setInterval(() => { setClockState(clock.state); setElapsedMs(clock.elapsedMs) }, 100)
     return () => window.clearInterval(timer)
   }, [clock])
   const [roomReady, setRoomReady] = useState(false)
@@ -211,6 +212,8 @@ export default function PracticeRoom({ frame, navigation }: {
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.xr.enabled = true
+    // Update the tracked camera before positioning view-following content.
+    renderer.xr.cameraAutoUpdate = false
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xdce5dd)
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100)
@@ -393,14 +396,16 @@ export default function PracticeRoom({ frame, navigation }: {
         setCount(null)
         actRef.current('start')
       }
-      sessionPanel.update(countdown.remaining, clock.state === 'paused', countdown.remaining !== null || clock.state === 'running' || clock.state === 'paused')
+      sessionPanel.update(countdown.remaining, clock.state === 'paused', countdown.remaining !== null || clock.state === 'running' || clock.state === 'paused', clock.elapsedMs)
       if (renderer.xr.isPresenting) {
-        const viewer = renderer.xr.getCamera()
+        presenterPivot.updateMatrixWorld(true)
+        renderer.xr.updateCamera(xrCamera)
+        const viewer = xrCamera
         viewer.getWorldPosition(sessionPanel.mesh.position)
         viewer.getWorldQuaternion(sessionPanel.mesh.quaternion)
       }
       if (clock.state === 'running' && (clock.elapsedMs < lastHeadSample || clock.elapsedMs - lastHeadSample >= 100)) {
-        const head = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera
+        const head = renderer.xr.isPresenting ? xrCamera : camera
         head.getWorldQuaternion(headOrientation)
         clock.record('head', { orientation: headOrientation.toArray(), source: renderer.xr.isPresenting ? 'headset' : 'desktop-preview' })
         lastHeadSample = clock.elapsedMs
@@ -537,6 +542,7 @@ export default function PracticeRoom({ frame, navigation }: {
         </div>
       </div>}
       {mode === 'vr' && vrPhase === 'practice' && !immersive && <>
+        <time className="vr-timer" aria-label="Elapsed practice time">{formatTime(count !== null ? 0 : elapsedMs)}</time>
         <div className="vr-icon-controls" aria-label="Practice controls">
           <button disabled={count !== null || (clockState === 'paused' && !!reason)} onClick={togglePractice} aria-label={clockState === 'paused' ? 'Resume practice' : 'Pause practice'} title={clockState === 'paused' ? 'Resume' : 'Pause'}>
             <svg viewBox="0 0 24 24" aria-hidden="true">{clockState === 'paused' ? <path d="m8 5 11 7-11 7Z" fill="currentColor" /> : <><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></>}</svg>

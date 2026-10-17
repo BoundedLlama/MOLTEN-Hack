@@ -56,3 +56,5 @@
 .vr-overlay-error { position: absolute; bottom: 24px; left: 24px; background: #f2f6ec; padding: 12px; }
 @keyframes countdown-arrive { from { opacity: 0; transform: scale(1.08); } 20% { opacity: 1; } to { opacity: .65; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .vr-countdown span { animation: none; } .vr-start-button, .vr-icon-controls button { transition: none; } }
+
+.vr-timer { position: absolute; top: 24px; right: 24px; padding: 10px 18px; border-radius: 24px; background: #f2f6ece6; color: #385443; font: 600 20px monospace; pointer-events: none; z-index: 3; }
