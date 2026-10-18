@@ -7,6 +7,7 @@ import { SessionClock, formatTime, type SessionAction } from '../session/Session
 import SessionControls from '../session/SessionControls'
 import { shouldSuspendPage } from './visibility'
 import { createSessionPanel } from './sessionPanel'
+import VoiceQA from '../components/VoiceQA'
 import PageControls from '../components/PageControls'
 import { createPosterBoard } from './posterBoard'
 import { createConferenceRoom } from './conferenceRoom'
@@ -46,7 +47,9 @@ export default function PracticeRoom({ frame, navigation }: {
   const alive = useRef(true)
   const readiness = useRef('Upload a PDF before starting.')
   const currentFrame = useRef(frame)
+  const [qaEndSignal, setQaEndSignal] = useState(0)
   const act = (action: SessionAction) => {
+    if (action === 'end') setQaEndSignal(value => value + 1)
     try {
       if (clock.act(action) && (action === 'start' || action === 'resume')) {
         clock.record('page', { page: currentFrame.current?.page })
@@ -410,7 +413,7 @@ export default function PracticeRoom({ frame, navigation }: {
         clock.record('head', { orientation: headOrientation.toArray(), source: renderer.xr.isPresenting ? 'headset' : 'desktop-preview' })
         lastHeadSample = clock.elapsedMs
       }
-      if (!reducedMotion) updateAudience(performance.now() / 1000)
+      updateAudience(performance.now() / 1000, !reducedMotion)
       renderer.render(scene, renderer.xr.isPresenting ? xrCamera : camera)
     })
     return () => {
@@ -555,5 +558,6 @@ export default function PracticeRoom({ frame, navigation }: {
       </>}
 
     </div>
+    {entered && <VoiceQA immersive={immersive} endSignal={qaEndSignal} />}
   </section>
 }

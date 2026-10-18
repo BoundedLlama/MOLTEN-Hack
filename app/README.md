@@ -84,3 +84,75 @@ Verification: `npm run build`, `npm run lint`, and
 `node --test src/session/*.test.mjs src/xr/posterBoard.test.mjs`.
 On a headset over HTTPS, verify ray selection, pause/resume during speech,
 recording playback, hidden-tab/XR-exit pause, PDF removal, and restart.
+
+## Live audience voice Q&A (ElevenLabs)
+
+The full-screen room now has an optional bottom-right **Want live questions?**
+card in both room modes. Start voice Q&A requests microphone permission only
+when clicked; the same handset button ends the call (or cancels connection).
+The card reports connecting, listening, agent speaking, and accessible errors.
+Leaving the room or pressing practice Stop/End ends the call. Practice Pause
+only pauses the practice timer/recording; Q&A remains live until explicitly ended.
+
+### Setup
+
+1. Run `npm ci` in `app`.
+2. Copy `.env.example` to `.env.local` and restart Vite. The supplied value,
+   `VITE_ELEVENLABS_AGENT_ID=agent_9801m55ye4zdfcqvnh6rcrfz5hvr`, is a public
+   agent identifier, **not an API key**. The local env file is ignored by Git.
+   Set the same frontend variable in your hosting build environment and rebuild.
+3. In ElevenLabs, make the agent public with authentication disabled. Allow the
+   local testing and deployed domains in the agent's allowed-domain settings.
+   Agent availability, domain settings, and account usage remain to be verified
+   by the account owner. No API key is needed or included in this app.
+4. If the agent must be private, this frontend-only setup is insufficient: use a
+   secure authenticated backend endpoint to obtain a short-lived WebRTC
+   conversation token. Never put an ElevenLabs API key in browser code or a
+   `VITE_*` variable.
+
+Set these in the ElevenLabs agent dashboard (the app does not modify your agent):
+
+**Prompt:** “You are one curious, supportive audience member at a presentation rehearsal. Listen to the presenter and ask one concise, relevant question at a time. Wait for the presenter’s answer before asking a follow-up. Base questions only on what the presenter says; you cannot see their PDF. If asked a question, answer briefly, then return to your role as an audience member.”
+
+**First message:** “What is the main idea you’d like the audience to remember?”
+
+The official `@elevenlabs/react` SDK uses WebRTC for the conversation.
+`VoiceQA.tsx` uses its `ConversationProvider` and `useConversation`; the SDK's
+`onModeChange` callback drives `setAudienceSpeaking(mode === 'speaking')`, guarded
+against callbacks after ending. Listening, disconnect, error, leaving the room,
+and audience disposal/recreation close the mouth. One front-row member has a
+smooth mouth animation on the +Z face; other audience idle animations are unchanged.
+This is a speaking indicator, not phoneme-level lip synchronization.
+
+Only microphone audio goes to ElevenLabs. No PDF, page image, extracted text, or
+local recording is passed to the SDK. The agent hears the presenter, **not the
+PDF**. Local PDF rendering and the optional local recording workflow remain separate.
+See the [official React SDK documentation](https://elevenlabs.io/docs/eleven-agents/libraries/react).
+
+### Meta Quest 3S and manual checks
+
+Open the deployed **trusted HTTPS** site in Quest Browser on the headset itself.
+Start Q&A in the room before pressing the VR Start button and grant microphone
+permission. The SDK captures the browser's default audio input, which should be
+the Quest microphone when running on the headset; a laptop call uses the laptop's
+microphone and is not transferred to Quest. No device-specific API is required.
+Check headset/browser microphone permissions and headset audio volume if silent.
+
+The HTML card is not an immersive WebXR control. An established call is kept
+mounted during VR, and the talking audience member stays in the scene. Exit VR
+to use the card or use the existing in-world Stop button to end practice and Q&A.
+Exiting XR alone leaves the call available in the card. Microphone/audio continuity
+through XR entry and exit requires actual Quest 3S testing; it is not proven by a
+successful desktop build.
+
+Verify on localhost and the allowed HTTPS deployment:
+- Start, allow/deny microphone access, retry, listen, speak, interrupt, and end.
+- Check connection/domain failures show errors and close the mouth.
+- Confirm only the nearest front-row character's mouth moves during agent speech,
+  faces the presenter, and closes on listening/end/disconnection.
+- Enter/exit VR during a call; test headset mic and speaker audio, Pause behavior,
+  in-world Stop, leaving the room, repeat starts, and network loss.
+- If also using local recording, test simultaneous recording/Q&A on the headset.
+
+Automated checks: `node --test src/audience/audience.test.mjs src/session/*.test.mjs src/xr/*.test.mjs`,
+`npm run build` (includes TypeScript), and `npm run lint`.

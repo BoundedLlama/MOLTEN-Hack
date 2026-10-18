@@ -2,6 +2,13 @@ import * as THREE from 'three'
 
 const people: THREE.Group[] = []
 let audience: THREE.Group | null = null
+let speaking = false
+let mouth: THREE.Mesh | null = null
+
+export function setAudienceSpeaking(value: boolean): void {
+  speaking = value
+  if (!value && mouth) mouth.scale.y = 0.008
+}
 
 /** Seated audience faces +Z toward the presenter. Dimensions are in meters. */
 export function createAudience(count: number): THREE.Group {
@@ -43,6 +50,11 @@ export function createAudience(count: number): THREE.Group {
     part(sphere, materials.skin, [0.16, 0.205, 0.16], [0, 0.86, 0], upper)
     part(sphere, materials.hair, [0.167, 0.115, 0.162], [0, 0.99, -0.015], upper)
     part(sphere, materials.skin, [0.04, 0.045, 0.05], [0, 0.86, 0.15], upper)
+    // Front row, closest to the presenter. +Z is the front of the face.
+    if (i === 0) {
+      mouth = part(sphere, materials.dark, [0.06, 0.008, 0.018], [0, 0.79, 0.153], upper)
+      mouth.name = 'Audience speaker mouth'
+    }
     for (const x of [-1, 1]) {
       part(sphere, materials.dark, [0.016, 0.018, 0.012], [x * 0.06, 0.9, 0.147], upper)
       const arm = part(sphere, materials.shirt, [0.09, 0.27, 0.09], [x * 0.28, 0.23, 0.05], upper)
@@ -56,7 +68,9 @@ export function createAudience(count: number): THREE.Group {
   return audience
 }
 
-export function updateAudience(elapsedSeconds: number): void {
+export function updateAudience(elapsedSeconds: number, animateIdle = true): void {
+  if (mouth) mouth.scale.y = speaking ? 0.008 + 0.035 * (0.5 + 0.5 * Math.sin(elapsedSeconds * 18)) : 0.008
+  if (!animateIdle) return
   people.forEach((person, i) => {
     person.rotation.z = Math.sin(elapsedSeconds * 0.65 + i * 1.7) * 0.012
     person.rotation.y = Math.sin(elapsedSeconds * 0.35 + i) * 0.035
@@ -64,6 +78,8 @@ export function updateAudience(elapsedSeconds: number): void {
 }
 
 export function disposeAudience(): void {
+  setAudienceSpeaking(false)
+  mouth = null
   const geometries = new Set<THREE.BufferGeometry>()
   const materials = new Set<THREE.Material>()
   audience?.traverse((object) => {

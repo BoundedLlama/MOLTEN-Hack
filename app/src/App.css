@@ -58,3 +58,12 @@
 @media (prefers-reduced-motion: reduce) { .vr-countdown span { animation: none; } .vr-start-button, .vr-icon-controls button { transition: none; } }
 
 .vr-timer { position: absolute; top: 24px; right: 24px; padding: 10px 18px; border-radius: 24px; background: #f2f6ece6; color: #385443; font: 600 20px monospace; pointer-events: none; z-index: 3; }
+
+/* Optional voice conversation floats inside the fullscreen room only. */
+.voice-qa { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 6; width: min(320px, calc(100% - 32px)); max-height: 48dvh; overflow: auto; box-sizing: border-box; padding: 18px; border: 1px solid #ccd8c7; border-radius: 18px; background: #f7faf2f5; box-shadow: 0 8px 32px #203c2c25; }
+.voice-qa h2 { font-size: 18px; }
+.voice-qa p { font-size: 11px; line-height: 1.5; color: #52654f; margin: 8px 0 0; }
+.voice-qa .voice-qa-button { width: 100%; justify-content: center; min-height: 44px; margin-top: 14px; font-size: 14px; }
+.voice-qa-button svg { width: 20px; height: 20px; flex-shrink: 0; }
+.voice-qa .voice-qa-status { font-weight: 600; }
+.voice-qa .voice-qa-error { color: #8c3026; }
