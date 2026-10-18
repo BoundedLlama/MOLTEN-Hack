@@ -29,6 +29,8 @@ export default function PracticeRoom({ frame, navigation }: {
   const xrEntering = useRef(false)
   const enterXR = useRef<() => Promise<void>>(async () => {})
   const exitXR = useRef<() => void>(() => {})
+  const navigationRef = useRef(navigation)
+  useEffect(() => { navigationRef.current = navigation }, [navigation])
   const hudActions = useRef({ toggle: () => {}, stop: () => {} })
   const cancelCountdown = () => { countdown.cancel(); setCount(null) }
   const cancelRef = useRef(cancelCountdown)
@@ -243,7 +245,7 @@ export default function PracticeRoom({ frame, navigation }: {
     presenterPivot.name = 'Presenter pivot'
     presenterPivot.position.copy(presenterPosition)
     scene.add(presenterPivot)
-    const sessionPanel = createSessionPanel(() => hudActions.current.toggle(), () => hudActions.current.stop())
+    const sessionPanel = createSessionPanel(() => hudActions.current.toggle(), () => hudActions.current.stop(), delta => navigationRef.current.navigate(delta))
     scene.add(sessionPanel.mesh)
     sessionPanel.mesh.visible = false
     const controllerCleanups = [0, 1].map(index => {
@@ -410,7 +412,7 @@ export default function PracticeRoom({ frame, navigation }: {
         setCount(null)
         actRef.current('start')
       }
-      sessionPanel.update(countdown.remaining, clock.state === 'paused', countdown.remaining !== null || clock.state === 'running' || clock.state === 'paused', clock.elapsedMs)
+      sessionPanel.update(countdown.remaining, clock.state === 'paused', countdown.remaining !== null || clock.state === 'running' || clock.state === 'paused', clock.elapsedMs, navigationRef.current)
       if (renderer.xr.isPresenting) {
         presenterPivot.updateMatrixWorld(true)
         renderer.xr.updateCamera(xrCamera)
@@ -568,6 +570,8 @@ export default function PracticeRoom({ frame, navigation }: {
             <svg viewBox="0 0 24 24" aria-hidden="true">{clockState === 'paused' ? <path d="m8 5 11 7-11 7Z" fill="currentColor" /> : <><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></>}</svg>
           </button>
           <button onClick={stopPractice} aria-label="Stop practice" title="Stop"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg></button>
+          <button disabled={count !== null || navigation.loading || navigation.page <= 1} onClick={() => navigation.navigate(-1)} aria-label="Previous slide" title="Previous slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+          <button disabled={count !== null || navigation.loading || navigation.page >= navigation.pageCount} onClick={() => navigation.navigate(1)} aria-label="Next slide" title="Next slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
         </div>
         {count !== null && <div className="vr-countdown" role="status" aria-label={`Starting in ${count}`}><span key={count}>{count}</span></div>}
         {count === null && clockState === 'paused' && <div className="vr-paused" role="status">Paused</div>}

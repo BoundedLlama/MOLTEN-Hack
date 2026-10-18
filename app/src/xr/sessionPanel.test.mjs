@@ -40,3 +40,37 @@ test('view-following buttons remain ray-selectable after rotation and translatio
     globalThis.document = original
   }
 })
+
+test('slide rays respect page boundaries, loading, countdown and inactive controls', () => {
+  const context = new Proxy({}, { get: () => () => {} })
+  const original = globalThis.document
+  globalThis.document = { createElement: () => ({ getContext: () => context }) }
+  const changes = []
+  const panel = createSessionPanel(() => {}, () => {}, delta => changes.push(delta))
+  try {
+    const [, , , , back, next] = panel.mesh.children
+    panel.mesh.position.set(2, 1.6, -3)
+    panel.mesh.rotation.set(0.3, 1.8, -0.2)
+    const controller = new THREE.Object3D()
+    controller.position.copy(panel.mesh.position)
+    const click = target => {
+      panel.mesh.updateMatrixWorld(true)
+      controller.lookAt(controller.position.clone().multiplyScalar(2).sub(target.getWorldPosition(new THREE.Vector3())))
+      panel.select(controller)
+    }
+    panel.update(null, false, true, 0, { page: 1, pageCount: 3, loading: false })
+    click(back); click(next)
+    assert.deepEqual(changes, [1])
+    panel.update(null, true, true, 0, { page: 3, pageCount: 3, loading: false })
+    click(back); click(next)
+    assert.deepEqual(changes, [1, -1])
+    for (const [count, active, loading, pageCount] of [[null, true, true, 3], [3, true, false, 3], [null, false, false, 3], [null, true, false, 1]]) {
+      panel.update(count, false, active, 0, { page: 1, pageCount, loading })
+      click(back); click(next)
+    }
+    assert.deepEqual(changes, [1, -1])
+  } finally {
+    panel.dispose()
+    globalThis.document = original
+  }
+})

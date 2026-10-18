@@ -8,7 +8,7 @@ function App() {
   const [poster, setPoster] = useState<PosterFrame | null>(null)
   return (
     <>
-      <header><a className="brand" href="./"><span className="brand-icon" aria-hidden="true">▱</span> MOLTEN<span className="brand-dot">.</span></a><span className="header-note"><i /> Your presentation workspace</span></header>
+      <header><a className="brand" href="./"><span className="brand-icon" aria-hidden="true">▱</span> StageReady VR<span className="brand-dot">.</span></a><span className="header-note"><i /> Your presentation workspace</span></header>
       <main>
         <div className="eyebrow">MAKE ROOM FOR YOUR NEXT BIG IDEA</div>
         <h1>Great presentations<br />start with practice<span>.</span></h1>
@@ -18,7 +18,7 @@ function App() {
         </PdfUpload>
         <div className="below"><span className="mini-icon" aria-hidden="true">↳</span><p>Your ideas. Your own pace.<br /><span>One presentation at a time.</span></p></div>
       </main>
-      <footer><span>A little preparation. A lot more confidence.</span><span>MOLTEN <span className="spark" aria-hidden="true">✳</span></span></footer>
+      <footer><span>A little preparation. A lot more confidence.</span><span>StageReady VR <span className="spark" aria-hidden="true">✳</span></span></footer>
     </>
   )
 }
