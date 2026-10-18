@@ -156,3 +156,39 @@ Verify on localhost and the allowed HTTPS deployment:
 
 Automated checks: `node --test src/audience/audience.test.mjs src/session/*.test.mjs src/xr/*.test.mjs`,
 `npm run build` (includes TypeScript), and `npm run lint`.
+
+### Presentation head-orientation summary
+
+Start records position and orientation at approximately 10 Hz until End/Stop;
+paused time is excluded. Horizontal heading is assigned to the nearer audience
+or board direction using the current presenter position, with 3° of boundary
+hysteresis. This supports closely spaced directions (including a 40° separation)
+without changing the room layout. Missing/vertical pose samples and gaps beyond
+250 ms are reported as untracked time. Desktop samples are explicitly simulated.
+
+End/Stop exits immersive VR and displays duration, time and percentage in each
+zone, longest uninterrupted board-facing stretch, returns to the audience, and
+local personalized coaching. Percentages use tracked time only. It also displays
+head direction across a start-to-finish timeline: green for audience, gold for
+board, and gray for unavailable tracking. The timeline stays in the browser.
+This measures
+head orientation, not eye gaze. The summary automatically requests AI coaching through AssemblyAI's LLM Gateway.
+Only aggregate numeric timing metrics are sent; PDFs, audio, and raw poses remain
+local. Local coaching stays visible while loading and if the provider fails.
+
+Set `ASSEMBLYAI_API_KEY` in ignored `app/.env.local` (server only) and restart
+`npm run dev`. The same API route is available with `npm run build` followed by
+`npm run preview -- --host 0.0.0.0` for the demo. Optional `ASSEMBLYAI_MODEL`
+defaults to `claude-sonnet-4-6`. Never use a `VITE_` prefix for the key.
+The server caps input size, validates numeric fields, caches repeated metrics,
+and limits new model requests to 20/minute. No dependencies were added.
+
+A static-only deployment will show local coaching: the AI feature needs the
+`/api/presentation-summary` server handler as well. Vite preview is a demo server;
+a public production deployment should mount the handler in its server runtime
+with authentication and persistent rate limits. Provide trusted HTTPS for Quest.
+
+Validation: `node --test src/session/*.test.mjs src/xr/*.test.mjs src/audience/*.test.mjs`.
+On the headset, verify audience → board → audience turns, a board-facing stretch
+longer than 7 seconds, pause/resume, Stop, and a second session with cleared totals.
+Hardware behavior and summary visibility after XR exit require device testing.

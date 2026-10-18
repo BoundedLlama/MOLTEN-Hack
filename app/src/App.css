@@ -67,3 +67,29 @@
 .voice-qa-button svg { width: 20px; height: 20px; flex-shrink: 0; }
 .voice-qa .voice-qa-status { font-weight: 600; }
 .voice-qa .voice-qa-error { color: #8c3026; }
+
+.presentation-summary { position: fixed; inset: 0; z-index: 1100; overflow: auto; display: grid; justify-items: center; align-items: safe center; padding: 24px; background: #e8eee3; color: #253f37; }
+.summary-card { box-sizing: border-box; width: min(100%, 680px); padding: clamp(24px, 5vw, 48px); border-radius: 24px; background: #fafcf7; box-shadow: 0 20px 80px #253f3718; }
+.summary-card h2 { font-size: clamp(26px, 4vw, 38px); margin: 16px 0; }
+.summary-card p { line-height: 1.65; }
+.summary-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 28px 0 16px; }
+.summary-stats strong { display: block; font-size: 40px; font-variant-numeric: tabular-nums; }
+.summary-stats span { display: block; font-size: 14px; }
+.summary-bar { height: 12px; border-radius: 8px; overflow: hidden; background: #d6b985; }
+.summary-bar span { display: block; height: 100%; background: #456d59; }
+.summary-coaching { background: #edf3e7; border-radius: 14px; padding: 20px; margin: 24px 0; }
+.summary-coaching h3 { margin: 0; font-size: 18px; }
+.summary-note, .summary-coaching small { font-size: 12px; color: #526357; }
+.summary-card > button { margin-top: 16px; }
+.summary-timeline { margin: 24px 0; }
+.summary-timeline figcaption { font-size: 14px; margin-bottom: 12px; }
+.summary-timeline-track { display: flex; height: 26px; overflow: hidden; border-radius: 6px; background: #c4cbc4; }
+.summary-timeline-track span { height: 100%; flex-shrink: 0; }
+.summary-timeline-track .zone-audience { background: #456d59; }
+.summary-timeline-track .zone-board { background: #d6b985; }
+.summary-timeline-track .zone-unknown { background: #c4cbc4; }
+.summary-timeline-labels { display: flex; justify-content: space-between; font-size: 12px; margin-top: 8px; }
+.summary-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; margin-top: 12px; }
+.summary-legend span:nth-child(1) { color: #456d59; }
+.summary-legend span:nth-child(2) { color: #856326; }
+.summary-legend span:nth-child(3) { color: #626b62; }

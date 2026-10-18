@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { Countdown } from '../session/Countdown'
 import type { PageNavigation, PosterFrame } from '../poster/types'
 import { SessionClock, formatTime, type SessionAction } from '../session/SessionClock'
+import { classifyHead, summarizeHead, headTimeline, type HeadZone } from '../session/headSummary'
+import PresentationSummary from '../session/PresentationSummary'
 import SessionControls from '../session/SessionControls'
 import { shouldSuspendPage } from './visibility'
 import { createSessionPanel } from './sessionPanel'
@@ -32,6 +34,10 @@ export default function PracticeRoom({ frame, navigation }: {
   const cancelRef = useRef(cancelCountdown)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [clockState, setClockState] = useState(clock.state)
+  const [summaryDismissed, setSummaryDismissed] = useState(false)
+  const summary = useMemo(() => clockState === 'ended' ? summarizeHead(clock.events, clock.elapsedMs) : null, [clockState, clock])
+  const timeline = useMemo(() => clockState === 'ended' ? headTimeline(clock.events, clock.elapsedMs) : [], [clockState, clock])
+  useEffect(() => { if (clockState === 'ended') exitXR.current() }, [clockState])
   useEffect(() => {
     // Also reflect externally triggered pauses (visibility, device loss, XR exit).
     const timer = window.setInterval(() => { setClockState(clock.state); setElapsedMs(clock.elapsedMs) }, 100)
@@ -52,8 +58,10 @@ export default function PracticeRoom({ frame, navigation }: {
     if (action === 'end') setQaEndSignal(value => value + 1)
     try {
       if (clock.act(action) && (action === 'start' || action === 'resume')) {
+        if (action === 'start') setSummaryDismissed(false)
         clock.record('page', { page: currentFrame.current?.page })
       }
+      setClockState(clock.state)
       setSessionError('')
       refreshSession(value => value + 1)
     } catch { setSessionError('Session control failed. Check your microphone and try again.') }
@@ -369,6 +377,9 @@ export default function PracticeRoom({ frame, navigation }: {
     renderer.xr.addEventListener('sessionend', restoreSize)
     let lastHeadSample = -Infinity
     const headOrientation = new THREE.Quaternion()
+    const headPosition = new THREE.Vector3()
+    const headForward = new THREE.Vector3()
+    let lastZone: HeadZone | null = null
     renderer.setAnimationLoop((_time, frame) => {
       if (renderer.xr.isPresenting && needsAnchor && frame) {
         const referenceSpace = renderer.xr.getReferenceSpace()
@@ -407,10 +418,16 @@ export default function PracticeRoom({ frame, navigation }: {
         viewer.getWorldPosition(sessionPanel.mesh.position)
         viewer.getWorldQuaternion(sessionPanel.mesh.quaternion)
       }
+      if (clock.state !== 'running') { lastHeadSample = -Infinity; lastZone = null }
       if (clock.state === 'running' && (clock.elapsedMs < lastHeadSample || clock.elapsedMs - lastHeadSample >= 100)) {
         const head = renderer.xr.isPresenting ? xrCamera : camera
         head.getWorldQuaternion(headOrientation)
-        clock.record('head', { orientation: headOrientation.toArray(), source: renderer.xr.isPresenting ? 'headset' : 'desktop-preview' })
+        head.getWorldPosition(headPosition)
+        headForward.set(0, 0, -1).applyQuaternion(headOrientation)
+        const referenceSpace = renderer.xr.getReferenceSpace()
+        const tracking = !renderer.xr.isPresenting || (frame && referenceSpace && frame.getViewerPose(referenceSpace) && renderer.xr.getSession()?.visibilityState === 'visible')
+        lastZone = tracking ? classifyHead(headPosition, headForward, audienceTarget, poster.mesh.position, lastZone) : null
+        clock.record('head', { zone: lastZone, position: headPosition.toArray(), orientation: headOrientation.toArray(), source: renderer.xr.isPresenting ? 'headset' : 'desktop-preview' })
         lastHeadSample = clock.elapsedMs
       }
       updateAudience(performance.now() / 1000, !reducedMotion)
@@ -558,6 +575,7 @@ export default function PracticeRoom({ frame, navigation }: {
       </>}
 
     </div>
+    {summary && !summaryDismissed && !immersive && <PresentationSummary summary={summary} timeline={timeline} onClose={() => setSummaryDismissed(true)} />}
     {entered && <VoiceQA immersive={immersive} endSignal={qaEndSignal} />}
   </section>
 }
